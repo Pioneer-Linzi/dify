@@ -7,8 +7,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import {
   RiClipboardLine,
-  RiEditLine,
-  RiReplay15Line,
+  RiResetLeftLine,
   RiThumbDownLine,
   RiThumbUpLine,
 } from '@remixicon/react'
@@ -16,10 +15,13 @@ import type { ChatItem } from '../../types'
 import { useChatContext } from '../context'
 import copy from 'copy-to-clipboard'
 import Toast from '@/app/components/base/toast'
+import AnnotationCtrlButton from '@/app/components/base/features/new-feature-panel/annotation-reply/annotation-ctrl-button'
 import EditReplyModal from '@/app/components/app/annotation/edit-annotation-modal'
 import Log from '@/app/components/base/chat/chat/log'
 import ActionButton, { ActionButtonState } from '@/app/components/base/action-button'
 import NewAudioButton from '@/app/components/base/new-audio-button'
+import Modal from '@/app/components/base/modal/modal'
+import Textarea from '@/app/components/base/textarea'
 import cn from '@/utils/classnames'
 
 type OperationProps = {
@@ -32,6 +34,7 @@ type OperationProps = {
   hasWorkflowProcess: boolean
   noChatInput?: boolean
 }
+
 const Operation: FC<OperationProps> = ({
   item,
   question,
@@ -52,6 +55,8 @@ const Operation: FC<OperationProps> = ({
     onRegenerate,
   } = useChatContext()
   const [isShowReplyModal, setIsShowReplyModal] = useState(false)
+  const [isShowFeedbackModal, setIsShowFeedbackModal] = useState(false)
+  const [feedbackContent, setFeedbackContent] = useState('')
   const {
     id,
     isOpeningStatement,
@@ -70,24 +75,39 @@ const Operation: FC<OperationProps> = ({
     return messageContent
   }, [agent_thoughts, messageContent])
 
-  const handleFeedback = async (rating: 'like' | 'dislike' | null) => {
+  const handleFeedback = async (rating: 'like' | 'dislike' | null, content?: string) => {
     if (!config?.supportFeedback || !onFeedback)
       return
 
-    await onFeedback?.(id, { rating })
+    await onFeedback?.(id, { rating, content })
     setLocalFeedback({ rating })
+  }
+
+  const handleThumbsDown = () => {
+    setIsShowFeedbackModal(true)
+  }
+
+  const handleFeedbackSubmit = async () => {
+    await handleFeedback('dislike', feedbackContent)
+    setFeedbackContent('')
+    setIsShowFeedbackModal(false)
+  }
+
+  const handleFeedbackCancel = () => {
+    setFeedbackContent('')
+    setIsShowFeedbackModal(false)
   }
 
   const operationWidth = useMemo(() => {
     let width = 0
     if (!isOpeningStatement)
-      width += 28
+      width += 26
     if (!isOpeningStatement && showPromptLog)
-      width += 102 + 8
+      width += 28 + 8
     if (!isOpeningStatement && config?.text_to_speech?.enabled)
-      width += 33
+      width += 26
     if (!isOpeningStatement && config?.supportAnnotation && config?.annotation_reply?.enabled)
-      width += 56 + 8
+      width += 26
     if (config?.supportFeedback && !localFeedback?.rating && onFeedback && !isOpeningStatement)
       width += 60 + 8
     if (config?.supportFeedback && localFeedback?.rating && onFeedback && !isOpeningStatement)
@@ -108,13 +128,13 @@ const Operation: FC<OperationProps> = ({
         )}
         style={(!hasWorkflowProcess && positionRight) ? { left: contentWidth + 8 } : {}}
       >
-        {showPromptLog && (
+        {showPromptLog && !isOpeningStatement && (
           <div className='hidden group-hover:block'>
             <Log logItem={item} />
           </div>
         )}
         {!isOpeningStatement && (
-          <div className='hidden group-hover:flex ml-1 items-center gap-0.5 p-0.5 rounded-[10px] border-[0.5px] border-components-actionbar-border bg-components-actionbar-bg shadow-md backdrop-blur-sm'>
+          <div className='ml-1 hidden items-center gap-0.5 rounded-[10px] border-[0.5px] border-components-actionbar-border bg-components-actionbar-bg p-0.5 shadow-md backdrop-blur-sm group-hover:flex'>
             {(config?.text_to_speech?.enabled) && (
               <NewAudioButton
                 id={id}
@@ -126,40 +146,50 @@ const Operation: FC<OperationProps> = ({
               copy(content)
               Toast.notify({ type: 'success', message: t('common.actionMsg.copySuccessfully') })
             }}>
-              <RiClipboardLine className='w-4 h-4' />
+              <RiClipboardLine className='h-4 w-4' />
             </ActionButton>
             {!noChatInput && (
               <ActionButton onClick={() => onRegenerate?.(item)}>
-                <RiReplay15Line className='w-4 h-4' />
+                <RiResetLeftLine className='h-4 w-4' />
               </ActionButton>
             )}
             {(config?.supportAnnotation && config.annotation_reply?.enabled) && (
-              <ActionButton onClick={() => setIsShowReplyModal(true)}>
-                <RiEditLine className='w-4 h-4' />
-              </ActionButton>
+              <AnnotationCtrlButton
+                appId={config?.appId || ''}
+                messageId={id}
+                cached={!!annotation?.id}
+                query={question}
+                answer={content}
+                onAdded={(id, authorName) => onAnnotationAdded?.(id, authorName, question, content, index)}
+                onEdit={() => setIsShowReplyModal(true)}
+              />
             )}
           </div>
         )}
-        {!isOpeningStatement && config?.supportFeedback && onFeedback && (
-          <div className='hidden group-hover:flex ml-1 items-center gap-0.5 p-0.5 rounded-[10px] border-[0.5px] border-components-actionbar-border bg-components-actionbar-bg shadow-md backdrop-blur-sm'>
+        {!isOpeningStatement && config?.supportFeedback && !localFeedback?.rating && onFeedback && (
+          <div className='ml-1 hidden items-center gap-0.5 rounded-[10px] border-[0.5px] border-components-actionbar-border bg-components-actionbar-bg p-0.5 shadow-md backdrop-blur-sm group-hover:flex'>
             {!localFeedback?.rating && (
               <>
                 <ActionButton onClick={() => handleFeedback('like')}>
-                  <RiThumbUpLine className='w-4 h-4' />
+                  <RiThumbUpLine className='h-4 w-4' />
                 </ActionButton>
-                <ActionButton onClick={() => handleFeedback('dislike')}>
-                  <RiThumbDownLine className='w-4 h-4' />
+                <ActionButton onClick={handleThumbsDown}>
+                  <RiThumbDownLine className='h-4 w-4' />
                 </ActionButton>
               </>
             )}
+          </div>
+        )}
+        {!isOpeningStatement && config?.supportFeedback && localFeedback?.rating && onFeedback && (
+          <div className='ml-1 flex items-center gap-0.5 rounded-[10px] border-[0.5px] border-components-actionbar-border bg-components-actionbar-bg p-0.5 shadow-md backdrop-blur-sm'>
             {localFeedback?.rating === 'like' && (
               <ActionButton state={ActionButtonState.Active} onClick={() => handleFeedback(null)}>
-                <RiThumbUpLine className='w-4 h-4' />
+                <RiThumbUpLine className='h-4 w-4' />
               </ActionButton>
             )}
             {localFeedback?.rating === 'dislike' && (
               <ActionButton state={ActionButtonState.Destructive} onClick={() => handleFeedback(null)}>
-                <RiThumbDownLine className='w-4 h-4' />
+                <RiThumbDownLine className='h-4 w-4' />
               </ActionButton>
             )}
           </div>
@@ -178,6 +208,32 @@ const Operation: FC<OperationProps> = ({
         createdAt={annotation?.created_at}
         onRemove={() => onAnnotationRemoved?.(index)}
       />
+      {isShowFeedbackModal && (
+        <Modal
+          title={t('common.feedback.title') || 'Provide Feedback'}
+          subTitle={t('common.feedback.subtitle') || 'Please tell us what went wrong with this response'}
+          onClose={handleFeedbackCancel}
+          onConfirm={handleFeedbackSubmit}
+          onCancel={handleFeedbackCancel}
+          confirmButtonText={t('common.operation.submit') || 'Submit'}
+          cancelButtonText={t('common.operation.cancel') || 'Cancel'}
+        >
+          <div className='space-y-3'>
+            <div>
+              <label className='system-sm-semibold mb-2 block text-text-secondary'>
+                {t('common.feedback.content') || 'Feedback Content'}
+              </label>
+              <Textarea
+                value={feedbackContent}
+                onChange={e => setFeedbackContent(e.target.value)}
+                placeholder={t('common.feedback.placeholder') || 'Please describe what went wrong or how we can improve...'}
+                rows={4}
+                className='w-full'
+              />
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   )
 }

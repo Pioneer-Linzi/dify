@@ -2,7 +2,7 @@
 import type { FC } from 'react'
 import React from 'react'
 import { useContext } from 'use-context-selector'
-import produce from 'immer'
+import { produce } from 'immer'
 import {
   RiAddLine,
 } from '@remixicon/react'
@@ -159,7 +159,7 @@ const Prompt: FC<IPromptProps> = ({
         <Button
           onClick={handleAddMessage}
           className='mt-3 w-full'>
-          <RiAddLine className='w-4 h-4 mr-2' />
+          <RiAddLine className='mr-2 h-4 w-4' />
           <div>{t('appDebug.promptMode.operation.addMessage')}</div>
         </Button>
       )}
